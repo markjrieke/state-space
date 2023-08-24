@@ -143,7 +143,7 @@ summary(noise)
 ```
 
        Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-    -2.3803 -0.9440 -0.1643 -0.1716  0.5362  3.0369 
+    -2.1440 -0.9125 -0.2766 -0.2178  0.4495  1.8243 
 
 - Note that `summary()` will also return the number of `NA`s, if any.
 - Let’s talk about dealing with outliers and missing observations:
@@ -348,7 +348,12 @@ hw_nile
 hw_co2 <- HoltWinters(co2)
 hw_ukgas <- HoltWinters(log(UKgas))
 hw_noise <- HoltWinters(noise, gamma = FALSE)
+```
 
+    Warning in HoltWinters(noise, gamma = FALSE): optimization difficulties: ERROR:
+    ABNORMAL_TERMINATION_IN_LNSRCH
+
+``` r
 oldpar <- par(no.readonly = TRUE)
 par(mfrow = c(2, 2),
     oma = c(0, 0, 0, 0),
@@ -363,6 +368,144 @@ plot(hw_noise, main = "", sub = "Noise")
 
 ![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-8-1.png)
 
+- We an also check out the `residuals()` and the individual components
+  of Holt-Winters:
+
+``` r
+ts.union(y = hw_nile$x,
+         level = hw_nile$fitted[,"level"],
+         residuals = residuals(hw_nile)) |>
+  plot(main = "",
+       cex.lab = 1.3, 
+       cex.axis = 1.5,
+       mar = c(0, 5, 1, 1))
+```
+
+![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-9-1.png)
+
+``` r
+ts.union(y = hw_co2$x,
+         level = hw_co2$fitted[,"level"] + hw_co2$fitted[,"trend"],
+         season = hw_co2$fitted[,"season"],
+         residuals = residuals(hw_co2)) |>
+  plot(main = "",
+       cex.lab = 1.3,
+       cex.axis = 1.5,
+       mar = c(0, 5, 1, 1))
+```
+
+![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-9-2.png)
+
+``` r
+ts.union(y = hw_ukgas$x,
+         level = hw_ukgas$fitted[,"level"] + hw_ukgas$fitted[,"trend"],
+         season = hw_ukgas$fitted[,"season"],
+         residuals = residuals(hw_ukgas)) |>
+  plot(main = "",
+       cex.lab = 1.3, 
+       cex.axis = 1.5,
+       mar = c(0, 5, 1, 1))
+```
+
+![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-9-3.png)
+
+``` r
+ts.union(y = hw_noise$x,
+         level = hw_noise$fitted[,"level"] + hw_noise$fitted[,"trend"],
+         residuals = residuals(hw_noise)) |>
+  plot(main = "",
+       cex.lab = 1.3,
+       cex.axis = 1.5,
+       mar = c(0, 5, 1, 1))
+```
+
+![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-9-4.png)
+
+- We can also `predict()` ahead:
+
+``` r
+plot(hw_nile, predict(hw_nile, n.ahead = 12), main = "Nile")
+```
+
+![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-10-1.png)
+
+``` r
+plot(hw_co2, predict(hw_co2, n.ahead = 12), main = "CO2")
+```
+
+![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-10-2.png)
+
+``` r
+plot(hw_ukgas, predict(hw_ukgas, n.ahead = 12), main = "log(UKgas)")
+```
+
+![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-10-3.png)
+
+``` r
+plot(hw_noise, predict(hw_noise, n.ahead = 12), main = "Noise")
+```
+
+![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-10-4.png)
+
+- Fitting data to noise yields a bad prediction!
+
+## 4.6 Diagnostic Checking for the Results
+
+- Residuals are useful for checking analysis.
+- We can also check the autocorrelation of the residuals:
+
+``` r
+oldpar <- par(no.readonly = TRUE)
+par(mfrow = c(2, 2), 
+    oma = c(0, 0, 0, 0), 
+    mar = c(5, 3.5, 2, 1), 
+    mgp = c(2.5, 1, 0))
+
+acf(residuals(hw_nile), main = "", sub = "Nile")
+acf(residuals(hw_co2), main = "", sub = "CO2")
+acf(residuals(hw_ukgas), main = "", sub = "log(UKgas)")
+acf(residuals(hw_noise), main = "", sub = "Noise")
+```
+
+![](chapter-04-notes_files/figure-commonmark/unnamed-chunk-11-1.png)
+
 ``` r
 par(oldpar)
 ```
+
+- Checking the validity of the predictions is also worthwhile to ensure
+  we don’t see strange behavior.
+- The noise model, for example, makes bad future predictions! (because
+  it’s a bad model)
+- We can also check prediction accuracy with metrics like MAPE, rmse,
+  etc.
+
+## 4.7 Guideline When Applying the State-Space Model
+
+- The Holt-Winters model is deterministic, though the Hagiwara
+  recommends stochastic models going forward. This is how the state
+  space model is implemented.
+- The state space model has two types of solutions:
+  - The *batch solution*, which is suitable for fixed-interval
+    smoothing.
+  - The *sequential solution*, which is suitable for fixed-lag
+    smoothing.
+- Additionally, the state-space model can be roughly classified into two
+  groups: the *linear Gaussian state-space model* and the *general
+  state-space model*.
+- The linear state-space model, there is a computationally efficient
+  solving algorithm, while the general state-space model typically
+  requires more computation (e.g., MCMC).
+- We’ll look at several model types:
+
+``` r
+tibble::tibble(Model = c("Linear Gaussian", "General"),
+               `Batch type` = c("Wiener Filter", "MCMC"),
+               `Sequential type` = c("Kalman Filter", "Particle Filter")) |>
+  knitr::kable()
+```
+
+| Model           | Batch type    | Sequential type |
+|:----------------|:--------------|:----------------|
+| Linear Gaussian | Wiener Filter | Kalman Filter   |
+| General         | MCMC          | Particle Filter |
