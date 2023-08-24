@@ -260,7 +260,97 @@ plot(hw_nile, main = "", sub = "Nile")
 plot(hw_co2, main = "", sub = "CO2")
 plot(hw_ukgas, main = "", sub = "log(UKgas)")
 plot(hw_noise, main = "", sub = "Noise")
+```
+
+* We an also check out the `residuals()` and the individual components of Holt-Winters:
+
+```{r}
+ts.union(y = hw_nile$x,
+         level = hw_nile$fitted[,"level"],
+         residuals = residuals(hw_nile)) |>
+  plot(main = "",
+       cex.lab = 1.3, 
+       cex.axis = 1.5,
+       mar = c(0, 5, 1, 1))
+
+ts.union(y = hw_co2$x,
+         level = hw_co2$fitted[,"level"] + hw_co2$fitted[,"trend"],
+         season = hw_co2$fitted[,"season"],
+         residuals = residuals(hw_co2)) |>
+  plot(main = "",
+       cex.lab = 1.3,
+       cex.axis = 1.5,
+       mar = c(0, 5, 1, 1))
+
+ts.union(y = hw_ukgas$x,
+         level = hw_ukgas$fitted[,"level"] + hw_ukgas$fitted[,"trend"],
+         season = hw_ukgas$fitted[,"season"],
+         residuals = residuals(hw_ukgas)) |>
+  plot(main = "",
+       cex.lab = 1.3, 
+       cex.axis = 1.5,
+       mar = c(0, 5, 1, 1))
+
+ts.union(y = hw_noise$x,
+         level = hw_noise$fitted[,"level"] + hw_noise$fitted[,"trend"],
+         residuals = residuals(hw_noise)) |>
+  plot(main = "",
+       cex.lab = 1.3,
+       cex.axis = 1.5,
+       mar = c(0, 5, 1, 1))
+```
+
+* We can also `predict()` ahead:
+
+```{r}
+plot(hw_nile, predict(hw_nile, n.ahead = 12), main = "Nile")
+plot(hw_co2, predict(hw_co2, n.ahead = 12), main = "CO2")
+plot(hw_ukgas, predict(hw_ukgas, n.ahead = 12), main = "log(UKgas)")
+plot(hw_noise, predict(hw_noise, n.ahead = 12), main = "Noise")
+```
+
+* Fitting data to noise yields a bad prediction!
+
+## 4.6 Diagnostic Checking for the Results
+
+* Residuals are useful for checking analysis.
+* We can also check the autocorrelation of the residuals:
+
+```{r}
+oldpar <- par(no.readonly = TRUE)
+par(mfrow = c(2, 2), 
+    oma = c(0, 0, 0, 0), 
+    mar = c(5, 3.5, 2, 1), 
+    mgp = c(2.5, 1, 0))
+
+acf(residuals(hw_nile), main = "", sub = "Nile")
+acf(residuals(hw_co2), main = "", sub = "CO2")
+acf(residuals(hw_ukgas), main = "", sub = "log(UKgas)")
+acf(residuals(hw_noise), main = "", sub = "Noise")
 
 par(oldpar)
 ```
+
+* Checking the validity of the predictions is also worthwhile to ensure we don't see strange behavior.
+* The noise model, for example, makes bad future predictions! (because it's a bad model)
+* We can also check prediction accuracy with metrics like MAPE, rmse, etc. 
+
+## 4.7 Guideline When Applying the State-Space Model
+
+* The Holt-Winters model is deterministic, though the Hagiwara recommends stochastic models going forward. This is how the state space model is implemented.
+* The state space model has two types of solutions:
+  * The *batch solution*, which is suitable for fixed-interval smoothing.
+  * The *sequential solution*, which is suitable for fixed-lag smoothing.
+* Additionally, the state-space model can be roughly classified into two groups: the *linear Gaussian state-space model* and the *general state-space model*. 
+* The linear state-space model, there is a computationally efficient solving algorithm, while the general state-space model typically requires more computation (e.g., MCMC).
+* We'll look at several model types:
+
+```{r}
+tibble::tibble(Model = c("Linear Gaussian", "General"),
+               `Batch type` = c("Wiener Filter", "MCMC"),
+               `Sequential type` = c("Kalman Filter", "Particle Filter")) |>
+  knitr::kable()
+```
+
+
 
