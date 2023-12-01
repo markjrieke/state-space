@@ -154,3 +154,154 @@ tibble(m, C, y) %>%
 ```
 
 ![](chapter-08-notes_files/figure-commonmark/unnamed-chunk-2-1.png)
+
+- The log-likelihood for the entire series can be obtained from the
+  one-step-ahead predictive likelihood:
+
+$$
+\begin{align*}
+l(\theta) &= \sum_{t=1}^T \log p(y_t \ | \ y_{1:t-1}; \theta) \\
+&= -\frac{1}{2} \sum_{t=1}^T \log | Q_t |- \frac{1}{2} \sum_{t=1}^T \frac{(y_t - f_t)^2}{Q_t}
+\end{align*}
+$$
+
+### 8.1.2 Kalman Prediction
+
+- Kalman prediction for $k$ step ahead predictive distribution:
+  $\text{Normal}(a_t(k), R_t(k))$
+
+``` r
+# kalman prediction from scratch! (assuming filtering already completed)
+
+# prediction period
+t <- t_max
+n_ahead <- 10
+
+kalman_prediction <- function(a_t0, R_t0) {
+  
+  # one step ahead predictive distribution
+  a_t1 <- G_t_plus_1 %*% a_t0
+  R_t1 <- G_t_plus_1 %*% R_t0 %*% t(G_t_plus_1) + W_t_plus_1
+  
+  return(list(a = a_t1, R = R_t1))
+  
+}
+
+# set time invariant parameters
+G_t_plus_1 <- G_t
+W_t_plus_1 <- W_t 
+
+# initialize empty vectors
+a_ <- rep(NA_real_, t_max + n_ahead)
+R_ <- rep(NA_real_, t_max + n_ahead)
+
+# k = 0 (zero-step ahead prediction = filtering distribution)
+a_[t + 0] <- m[t]
+R_[t + 0] <- C[t]
+
+# k = 1 to n_ahead
+for (k in 1:n_ahead) {
+  KP <- kalman_prediction(a_[t + k-1], R_[t + k-1])
+  a_[t+k] <- KP$a
+  R_[t+k] <- KP$R
+}
+
+tibble(m, C, y) %>%
+  mutate(sd = sqrt(C)) %>%
+  normal_interval(m, sd) %>%
+  select(-c(C, sd)) %>% 
+  bind_rows(tibble(a = a_, 
+                   R = R_)) %>% 
+  filter(!is.na(m) | !is.na(a)) %>%
+  rename_with(~paste0("filter_", .x),
+              .cols = starts_with("ci")) %>%
+  mutate(sd = sqrt(R)) %>%
+  normal_interval(a, sd) %>%
+  rowid_to_column("idx") %>% 
+  ggplot(aes(x = idx)) + 
+  geom_ribbon(aes(ymin = filter_ci_lower,
+                  ymax = filter_ci_upper),
+              fill = "royalblue",
+              alpha = 0.5) +
+  geom_line(aes(y = m),
+            color = "royalblue") +
+  geom_point(aes(y = y)) +
+  geom_line(aes(y = ci_lower),
+            color = "royalblue",
+            linetype = "dashed") +
+  geom_line(aes(y = ci_upper),
+            color = "royalblue",
+            linetype = "dashed") +
+  geom_line(aes(y = a),
+            color = "royalblue",
+            linetype = "dashed") +
+  theme_rieke(base_family = "sans")
+```
+
+    Warning: Removed 11 rows containing missing values (`geom_line()`).
+
+    Warning: Removed 11 rows containing missing values (`geom_point()`).
+
+    Warning: Removed 100 rows containing missing values (`geom_line()`).
+    Removed 100 rows containing missing values (`geom_line()`).
+    Removed 100 rows containing missing values (`geom_line()`).
+
+![](chapter-08-notes_files/figure-commonmark/unnamed-chunk-3-1.png)
+
+### 8.1.3 Kalman Smoothing
+
+- This book focuses on fixed-interval smoothing & assumes that Kalman
+  filtering through $T$ has been completed.
+- The smoothing distribution for the linear Gaussian state-space model
+  is also the normal distribution, and as such is
+  $\text{Normal}(s_t, S_t)$.
+
+``` r
+# kalman smoothing from scratch! (assuming filtering has been completed)
+
+kalman_smoothing <- function(s_t_plus_1, S_t_plus_1, t) {
+  
+  # smoothing gain
+  A_t <- C[t] %*% t(G_t_plus_1) %*% MASS::ginv(R[t+1])
+  
+  # state update
+  s_t <- m[t] + A_t %*% (s_t_plus_1 - a[t+1])
+  S_t <- C[t] + A_t %*% (S_t_plus_1 - R[t+1]) %*% t(A_t)
+  
+  # return the mean/variance of the smoothing distribution
+  return(list(s = s_t, S = S_t))
+  
+}
+
+# initialize empty vectors
+s <- rep(NA_real_, t_max)
+S <- rep(NA_real_, t_max)
+
+# time point t = t_max
+s[t_max] <- m[t_max]
+S[t_max] <- C[t_max]
+
+for (t in (t_max - 1):1) {
+  KS <- kalman_smoothing(s[t+1], S[t+1], t)
+  s[t] <- KS$s
+  S[t] <- KS$S
+}
+
+tibble(y = y,
+       s = s,
+       S = S) %>%
+  rowid_to_column("idx") %>%
+  mutate(sd = sqrt(S)) %>%
+  normal_interval(s, sd) %>%
+  ggplot(aes(x = idx)) + 
+  geom_ribbon(aes(ymin = ci_lower,
+                  ymax = ci_upper),
+              fill = "royalblue",
+              alpha = 0.5) +
+  geom_line(aes(y = s),
+            color = "royalblue") + 
+  geom_point(aes(y = y)) + 
+  theme_rieke(base_family = "sans")
+```
+
+![](chapter-08-notes_files/figure-commonmark/unnamed-chunk-4-1.png)
